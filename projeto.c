@@ -163,25 +163,26 @@ static void abrirConexao(void)
 
 static void fecharConexao(void)
 {
-    // TODO: chamar FechaConexaoImpressora e tratar retorno
     int ret;
-    
+
     ret = FechaConexaoImpressora();
     
-    if(g_conectada == 0)
-    {
-    	printf("Conexão Fechada\n");
-	}
-	else
-	{
-		printf("Falha, retorno: %d", ret);
-	}
+    if (ret == 1) {
+        g_conectada = 0;
+    }
+
+    if (g_conectada == 0) {
+        printf("Conexão Fechada\n");
+    }
+    else {
+        printf("Falha, retorno: %d\n", ret);
+    }
 }
 
 static void imprimirTexto(void)
 {
     if (!g_conectada) {
-        printf("\nErro: Conexao nao aberta.\n");
+        printf("\nErro: Conexao com a impressora nao esta aberta.\n");
         return;
     }
 
@@ -189,27 +190,96 @@ static void imprimirTexto(void)
     int ret;
 
     printf("\n--- IMPRESSAO DE TEXTO ---\n");
-    printf("Digite o texto: ");
+    printf("Digite o texto a ser impresso: ");
     flush_entrada();
-    fgets(texto, sizeof(texto), stdin);
-    texto[strcspn(texto, "\n")] = 0;
+    if (fgets(texto, sizeof(texto), stdin) == NULL) { return; }
+    texto[strcspn(texto, "\n")] = 0; 
 
+    
     ret = ImpressaoTexto(texto, 1, 0, 0);
-
     if (ret != 0) {
-        printf("Erro ao imprimir texto (%d)\n", ret);
+        printf("Erro ao imprimir texto. (Retorno: %d)\n", ret);
         return;
     }
 
-    AvancaPapel(100);
-    Corte(0);
-    printf("Impressao concluida.\n");
+  
+    ret = AvancaPapel(100); 
+    if (ret != 0) {
+        printf("Aviso: Falha ao avancar o papel. (Retorno: %d)\n", ret);
+     
+    }
+    
+  
+    ret = Corte(0); 
+    if (ret == 0) {
+        printf("\nImpressao, Avanco de Papel e Corte realizados com sucesso!\n");
+    } else {
+        printf("\nImpressao e Avanco de Papel OK, mas falha no Corte. (Retorno: %d)\n", ret);
+    }
 }
 static void imprimirQRCode(void)
 {
-    // TODO: solicitar conte?do do QRCode e chamar ImpressaoQRCode(texto, 6, 4)
-    // incluir AvancaPapel e Corte no final
+    if (g_conectada == 0) {
+        printf("Abra conexão primeiro\n");
+        return;
+    }
+
+    char dados[400];
+    int tamanho, nivelcorrecao;
+    int ret;
+
+    printf("Digite o conteúdo do QRCode:\n");
+    fgets(dados, sizeof(dados), stdin);
+    dados[strcspn(dados, "\n")] = '\0';
+
+    
+    do {
+        printf("Digite o tamanho do QRCode (1 a 6): ");
+        scanf("%d", &tamanho);
+
+        if (tamanho < 1 || tamanho > 6) {
+            printf("Tamanho inválido. Tente novamente.\n");
+        }
+
+    } while (tamanho < 1 || tamanho > 6);
+
+   
+    do {
+        printf("Digite o nível de correção do QRCode (1 a 4): ");
+        scanf("%d", &nivelcorrecao);
+
+        if (nivelcorrecao < 1 || nivelcorrecao > 4) {
+            printf("Nível de correção inválido. Tente novamente.\n");
+        }
+
+    } while (nivelcorrecao < 1 || nivelcorrecao > 4);
+
+  
+    getchar();
+
+  
+    ret = ImpressaoQRCode(dados, tamanho, nivelcorrecao);
+    if (ret != 1) {
+        printf("Falha ao imprimir QRCode. Retorno: %d\n", ret);
+        return;
+    }
+
+    ret = AvancaPapel(100);
+    if (ret != 1) {
+        printf("Falha ao avançar papel. Retorno: %d\n", ret);
+        return;
+    }
+
+   
+    ret = Corte(0);
+    if (ret != 1) {
+        printf("Falha ao cortar papel. Retorno: %d\n", ret);
+        return;
+    }
+
+    printf("QRCode impresso com sucesso!\n");
 }
+
 
 void impressaoCodigoBarras ()
 {
@@ -235,17 +305,55 @@ static void imprimirXMLSAT(void)
 
 static void imprimirXMLCancelamentoSAT(void)
 {
-    // TODO: ler o arquivo ./CANC_SAT.xml e chamar ImprimeXMLCancelamentoSAT
-    // incluir AvancaPapel e Corte no final
-    
-	/*usar assinatura abaixo:
+    if (!g_conectada) {
+        printf("Erro: Conecte antes.\n");
+        return;
+    }
+
+    printf("\n--- IMPRESSÃO DE XML DE CANCELAMENTO SAT ---\n");
+
+    FILE *f = fopen("./CANC_SAT.xml", "rb");
+    if (!f) {
+        printf("Erro: não foi possível abrir o arquivo CANC_SAT.xml\n");
+        return;
+    }
+
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    rewind(f);
+
+    char *xml = malloc(size + 1);
+    if (!xml) {
+        fclose(f);
+        printf("Erro de memória ao ler o arquivo.\n");
+        return;
+    }
+
+    fread(xml, 1, size, f);
+    xml[size] = '\0';   
+    fclose(f);
+
+    const char *assinatura =
         "Q5DLkpdRijIRGY6YSSNsTWK1TztHL1vD0V1Jc4spo/CEUqICEb9SFy82ym8EhBRZ"
         "jbh3btsZhF+sjHqEMR159i4agru9x6KsepK/q0E2e5xlU5cv3m1woYfgHyOkWDNc"
         "SdMsS6bBh2Bpq6s89yJ9Q6qh/J8YHi306ce9Tqb/drKvN2XdE5noRSS32TAWuaQE"
         "Vd7u+TrvXlOQsE3fHR1D5f1saUwQLPSdIv01NF6Ny7jZwjCwv1uNDgGZONJdlTJ6"
         "p0ccqnZvuE70aHOI09elpjEO6Cd+orI7XHHrFCwhFhAcbalc+ZfO5b/+vkyAHS6C"
         "YVFCDtYR9Hi5qgdk31v23w==";
-        */
+
+    int ret = ImprimeXMLCancelamentoSAT(xml, assinatura, 0);
+
+    free(xml);
+
+    if (ret != 0) {
+        printf("Erro ao imprimir XML de cancelamento SAT (retorno %d)\n", ret);
+        return;
+    }
+
+    AvancaPapel(100);
+    Corte(0);
+
+    printf("XML de cancelamento SAT impresso com sucesso!\n");
 }
 
 static void abrirGavetaElgin(){
